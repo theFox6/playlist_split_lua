@@ -1,12 +1,9 @@
---TODO: gmatch instead of split
-dofile("splitstring.lua")
-
 --TODO: log file
 
 local comments = false
 local keep = false
 local dry_run = false
-local name
+local path,name,extention
 for _,a in ipairs(arg) do
 	if a=="-h" or a == "--help" then
 		print("playlist_split.lua")
@@ -14,13 +11,8 @@ for _,a in ipairs(arg) do
 		print()
 		print("give the file you want to split as argument")
 		print("the songnames and durations will be read from a .txt file with the same name")
-		print("this file needs the following syntax:")
-		print("an ampty line marks the next song")
-		print("T <title>", "sets the songs title")
-		print("S <start>", "sets the songs starting time")
-		print("D <duration>", "sets the songs duration")
-		print("E <end>", "sets the songs ending time")
-		print("if there is are times or durations missing the tool will calculate or assume the nessecary information")
+		print("the files syntax is described in playlist_format.txt")
+		print("if there is are times or durations missing in the file the tool will calculate or assume the nessecary information")
 		print()
 		print("command line options:")
 		print("-h or --help", "guess what ...")
@@ -35,13 +27,11 @@ for _,a in ipairs(arg) do
 	elseif a=="-d" or a == "--dry" then
 		dry_run = true
 	else
-		name = a:split(".")
+		print(a)
+		path,name,extention = a:match("^(.+/)([%w%.%-]+)(%.%w+)$")
+		print(path,name,extention)
 	end
 end
-local extention = "."..table.remove(name)
-local path = table.concat(name):split("/")
-name = table.remove(path)
-path = table.concat(path,"/") .."/"
 
 local time = dofile("timetables.lua")
 
@@ -49,33 +39,65 @@ local songs = {}
 
 function load_songs()
 	local list_file = io.open(path..name..".txt","r")
-	local song = {}
+	local global = {tracknum = 0}
+	local function next_song()
+		return {
+			album = global.album,
+			artist = global.artist,
+		}
+	end
+	local song = next_song()
 
 	for l in list_file:lines() do
-		if l == "" then
-			if next(song) then
-				table.insert(songs,song)
-				song = {}
+		if l == ")" then
+			table.insert(songs,song)
+			song = nil
+		elseif l == "(" then
+			song = next_song()
+		elseif l == ")(" then
+			table.insert(songs,song)
+			song = next_song()
+		elseif l == "()" then
+			table.insert(songs,next_song())
+			song = nil
+		else
+			local t = l:sub(0,2)
+			local c = ""
+			if #l > 3 then
+				c = l:sub(4)
 			end
-		end
-		local t = l:sub(0,1)
-		if t=="T" then
-			song.title = l:sub(3)
-		elseif t=="S" then
-			song.start = time.parse(l:sub(3))
-		elseif t=="E" then
-			song.ending = time.parse(l:sub(3))
-		elseif t=="D" then
-			song.duration = time.parse(l:sub(3))
+			if t=="Ti" then
+				song.title = c
+			elseif t=="St" then
+				song.start = time.parse(c)
+			elseif t=="En" then
+				song.ending = time.parse(c)
+			elseif t=="Du" then
+				song.duration = time.parse(c)
+			elseif t=="Al" then
+				if song == nil then
+					global.album = c
+				else
+					song.album = c
+				end
+			elseif t=="Ar" then
+				if song == nil then
+					global.artist = c
+				else
+					song.artist = c
+				end
+			elseif t=="Tn" then
+				if c == "" then
+					global.tracknum = global.tracknum + 1
+				else
+					global.tracknum = tonumber(c)
+				end
+				song.tracknum = global.tracknum
+			end
 		end
 	end
 
 	list_file:close()
-
-	if next(song) then
-		table.insert(songs,song)
-		song = {}
-	end
 end
 
 load_songs()
@@ -84,15 +106,16 @@ function complete_songs()
 	local last_song,next_song
 	for i,song in pairs(songs) do
 		_, next_song = next(songs,i)
-		if not song.title then
-			song.title = name.." track "..i
-		end
 		if not song.start then
 			if song.ending and song.duration then
 				song.start = song.ending - song.duration
 			else
-				print("assuming track "..i.." starts at the end of the previous")
-				song.start = last_song.ending
+				if last_song then
+					print("assuming track "..i.." starts at the end of the previous")
+					song.start = last_song.ending
+				else
+					song.start = false
+				end
 			end
 		end
 		if not song.ending then
@@ -126,7 +149,33 @@ function complete_songs()
 end
 complete_songs()
 
-function ss_trim(inp,out,ss)
+function run_command(cline)
+	if dry_run then
+		print(cline)
+	else
+		os.execute(cline)
+	end
+end
+
+function cline_metadata(cline,meta)
+	if meta.title then
+		table.insert(cline,"-metadata title=\""..meta.title.."\"")
+	end
+
+	if meta.artist then
+		table.insert(cline,"-metadata artist=\""..meta.artist.."\"")
+	end
+
+	if meta.album then
+		table.insert(cline,"-metadata album=\""..meta.album.."\"")
+	end
+
+	if meta.tracknum then
+		table.insert(cline,"-metadata track=\""..meta.tracknum.."\"")
+	end
+end
+
+function ss_trim(inp,out,ss,meta)
 	local cline = {
 		-- command
 		"ffmpeg",
@@ -138,28 +187,26 @@ function ss_trim(inp,out,ss)
 		table.insert(cline,"-ss "..ss)
 	end
 	-- input
-	table.insert(cline,"-i \""..inp.."\"")
+	table.insert(cline,"-i "..inp)
 	-- remove comments
 	if not comments then
 		table.insert(cline,"-metadata comment=\"\" -metadata description=\"\"")
 	end
+	-- metadata
+	cline_metadata(cline,meta)
 	-- output
-	table.insert(cline,"\""..out.."\"")
-	if dry_run then
-		print(table.concat(cline," "))
-	else
-		os.execute(table.concat(cline," "))
-	end
+	table.insert(cline,out)
+	run_command(table.concat(cline," "))
 end
 
-function to_trim(inp,out,to)
+function to_trim(inp,out,to,meta)
 	local cline = {
 		-- command
 		"ffmpeg",
 		-- no user interaction
 		"-nostdin",
 		-- input
-		"-i \""..inp.."\""
+		"-i "..inp
 	}
 	if to then
 		-- end
@@ -169,33 +216,47 @@ function to_trim(inp,out,to)
 	if not comments then
 		table.insert(cline,"-metadata comment=\"\" -metadata description=\"\"")
 	end
+	-- metadata
+	cline_metadata(cline,meta)
 	-- output
-	table.insert(cline,"\""..out.."\"")
-	if dry_run then
-		print(table.concat(cline," "))
-	else
-		os.execute(table.concat(cline," "))
-	end
+	table.insert(cline,out)
+	run_command(table.concat(cline," "))
 end
 
---TODO: don't pre trim if start at 0 or end at eof
-
 for i,s in pairs(songs) do
-	local inp = path..name..extention
-	local trim = path..name.." trim"..i..extention
-	local title = path..s.title..extention
-	if i > #songs/2 then
-		ss_trim(inp,trim,s.start)
-		to_trim(trim,title,s.duration)
+	local inp = "\""..path..name..extention.."\""
+	local trim = "\""..path..name.." trim"..i..extention.."\""
+	local title
+	if not s.title then
+		title = "\""..path..name.." track "..i..extention.."\""
 	else
-		to_trim(inp,trim,s.ending)
-		ss_trim(trim,title,s.start)
+		title = "\""..path..s.title..extention.."\""
+	end
+	
+	if i > #songs/2 then
+		if s.start ~= false then
+			ss_trim(inp,trim,s.start,s)
+		else
+			run_command("cp "..inp.." "..trim)
+		end
+		if s.duration ~= false then
+			to_trim(trim,title,s.duration,s)
+		else
+			run_command("cp "..trim.." "..title)
+		end
+	else
+		if s.ending ~= false then
+			to_trim(inp,trim,s.ending,s)
+		else
+			run_command("cp "..inp.." "..trim)
+		end
+		if s.start ~= false then
+			ss_trim(trim,title,s.start,s)
+		else
+			run_command("cp "..trim.." "..title)
+		end
 	end
 	if not keep then
-		if dry_run then
-			print("rm "..path..name.." trim"..i..extention)
-		else
-			os.execute("rm \""..path..name.." trim"..i..extention.."\"")
-		end
+		run_command("rm "..trim)
 	end
 end

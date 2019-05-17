@@ -75,15 +75,14 @@ end
 
 function time.parse(str)
 	local t = time:new()
-	local numbers = str:split(":")
-	if #numbers == 3 then
-		t.s = tonumber(numbers[3])
-		t.m = tonumber(numbers[2])
-		t.h = tonumber(numbers[1])
-	elseif #numbers == 2 then
-		t.s = tonumber(numbers[2])
-		t.m = tonumber(numbers[1])
+	local h,m,s = str:match("^([%d.-]+):([%d.-]+):([%d.-]+)$")
+	if h == nil then
+		m,s = str:match("^([%d.-]+):([%d.-]+)$")
+	else
+		t.h = tonumber(h)
 	end
+	t.m = tonumber(m)
+	t.s = tonumber(s)
 	return t
 end
 
