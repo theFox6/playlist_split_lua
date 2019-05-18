@@ -1,5 +1,3 @@
---TODO: log file
-
 local comments = false
 local keep = false
 local dry_run = false
@@ -27,15 +25,18 @@ for _,a in ipairs(arg) do
 	elseif a=="-d" or a == "--dry" then
 		dry_run = true
 	else
-		print(a)
 		path,name,extention = a:match("^(.+/)([%w%.%-]+)(%.%w+)$")
-		print(path,name,extention)
 	end
 end
 
 local time = dofile("timetables.lua")
-
+local log_file = io.open(path.."playlist_split_log.txt","w")
 local songs = {}
+
+function log(msg)
+	print(msg)
+	log_file:write(msg)
+end
 
 function load_songs()
 	local list_file = io.open(path..name..".txt","r")
@@ -111,7 +112,7 @@ function complete_songs()
 				song.start = song.ending - song.duration
 			else
 				if last_song then
-					print("assuming track "..i.." starts at the end of the previous")
+					log("assuming track "..i.." starts at the end of the previous")
 					song.start = last_song.ending
 				else
 					song.start = false
@@ -123,7 +124,7 @@ function complete_songs()
 				song.ending = song.start + song.duration
 			else
 				if next_song then
-					print("assuming track "..i.." ends at the start of the next")
+					log("assuming track "..i.." ends at the start of the next")
 					song.ending = next_song.start
 				else
 					song.ending = false
@@ -140,8 +141,8 @@ function complete_songs()
 		end
 		if song.duration then
 			if song.start + song.duration ~= song.ending then
-				print("warning: track "..i.." ("..song.title..") starts at "..song.start.." and goes "..song.duration)
-				print("the difference will cause it to end at a diferent time or have a different duration")
+				log("warning: track "..i.." ("..song.title..") starts at "..song.start.." and goes "..song.duration)
+				log("the difference will cause it to end at a diferent time or have a different duration")
 			end
 		end
 		last_song = song
@@ -260,3 +261,5 @@ for i,s in pairs(songs) do
 		run_command("rm "..trim)
 	end
 end
+
+log_file:close()
