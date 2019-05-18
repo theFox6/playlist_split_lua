@@ -1,22 +1,41 @@
+--- #boolean whether comments are to be kept in the audio files
 local comments = false
+--- #boolean whether trimming files are to be kept
 local keep = false
+--- #boolean whener commands should not be run
 local dry_run = false
-local path,name,extention
+--- #string the path of the audio
+local path
+--- #string the name of the audio
+local name
+--- #string the extention of the audio
+local extention
+
+---
+-- Show the help.
+-- Shows the help to this script.
+--
+-- @function show_help
+local function show_help()
+  print("playlist_split.lua")
+  print("a too to split a soudfile in many smaller ones")
+  print()
+  print("give the file you want to split as argument")
+  print("the songnames and durations will be read from a .txt file with the same name")
+  print("the files syntax is described in playlist_format.txt")
+  print("If there is are times or durations missing in the file")
+  print("the tool will calculate or assume the nessecary information.")
+  print()
+  print("command line options:")
+  print("-h or --help", "guess what ...")
+  print("-c or --comments","doesn't remove the comment metadata from the output files")
+  print("-k or --keep","doesn't remove the created trimming files (pretty useless tho)")
+  print("-d or --dry","dry run, don't execute any commands only print them out")
+end
+
 for _,a in ipairs(arg) do
 	if a=="-h" or a == "--help" then
-		print("playlist_split.lua")
-		print("a too to split a soudfile in many smaller ones")
-		print()
-		print("give the file you want to split as argument")
-		print("the songnames and durations will be read from a .txt file with the same name")
-		print("the files syntax is described in playlist_format.txt")
-		print("if there is are times or durations missing in the file the tool will calculate or assume the nessecary information")
-		print()
-		print("command line options:")
-		print("-h or --help", "guess what ...")
-		print("-c or --comments","doesn't remove the comment metadata from the output files")
-		print("-k or --keep","doesn't remove the created trimming files (pretty useless tho)")
-		print("-d or --dry","dry run, don't execute any commands only print them out")
+		show_help()
 		return
 	elseif a=="-c" or a == "--comments" then
 		comments = true
@@ -29,16 +48,35 @@ for _,a in ipairs(arg) do
 	end
 end
 
-local time = dofile("timetables.lua")
+if not path then
+  show_help()
+  return
+end
+
+--- #timetables the timetables module
+local times = dofile("timetables.lua")
+--- #file the log file
 local log_file = io.open(path.."playlist_split_log.txt","w")
+--- #list<#table> the songs in the playlist
 local songs = {}
 
-function log(msg)
+---
+-- Write a log message.
+-- Writes a message to the standart out and the log file
+--
+-- @function log
+-- @param #string msg the message to be written
+local function log(msg)
 	print(msg)
 	log_file:write(msg)
 end
 
-function load_songs()
+---
+-- Load the songs.
+-- Parse the songs from the playlist file.
+--
+-- @function load_songs()
+local function load_songs()
 	local list_file = io.open(path..name..".txt","r")
 	local global = {tracknum = 0}
 	local function next_song()
@@ -70,11 +108,11 @@ function load_songs()
 			if t=="Ti" then
 				song.title = c
 			elseif t=="St" then
-				song.start = time.parse(c)
+				song.start = times.parse(c)
 			elseif t=="En" then
-				song.ending = time.parse(c)
+				song.ending = times.parse(c)
 			elseif t=="Du" then
-				song.duration = time.parse(c)
+				song.duration = times.parse(c)
 			elseif t=="Al" then
 				if song == nil then
 					global.album = c
@@ -103,10 +141,16 @@ end
 
 load_songs()
 
-function complete_songs()
+
+---
+-- Complete the songs times.
+-- Calculate start and ending times as well as durations.
+--
+-- @function complete_songs
+local function complete_songs()
 	local last_song,next_song
 	for i,song in pairs(songs) do
-		_, next_song = next(songs,i)
+		next_song = select(2,next(songs,i))
 		if not song.start then
 			if song.ending and song.duration then
 				song.start = song.ending - song.duration
@@ -150,7 +194,13 @@ function complete_songs()
 end
 complete_songs()
 
-function run_command(cline)
+---
+-- Run a command.
+-- Execute a command or print it out if this is a dry_run.
+--
+-- @function run_command
+-- @param #string cline the command to be run
+local function run_command(cline)
 	if dry_run then
 		print(cline)
 	else
@@ -158,7 +208,12 @@ function run_command(cline)
 	end
 end
 
-function cline_metadata(cline,meta)
+---
+-- Add the metadata of a song to a commandline table.
+-- Inserts the arguments needed to set the metadata of an audio.
+--
+-- @function cline_metadata
+local function cline_metadata(cline,meta)
 	if meta.title then
 		table.insert(cline,"-metadata title=\""..meta.title.."\"")
 	end
@@ -174,9 +229,23 @@ function cline_metadata(cline,meta)
 	if meta.tracknum then
 		table.insert(cline,"-metadata track=\""..meta.tracknum.."\"")
 	end
+
+	-- remove comments
+  if not comments then
+    table.insert(cline,"-metadata comment=\"\" -metadata description=\"\"")
+  end
 end
 
-function ss_trim(inp,out,ss,meta)
+---
+-- Trim the sound file by seeking to a position.
+-- Copy the sound of an audio to another starting at a certain position.
+--
+-- @function ss_trim
+-- @param #string inp the file to be streamed from
+-- @param #string out the file to be written to
+-- @param #time ss the time to be seeked to
+-- @param #table meta the songs metadata
+local function ss_trim(inp,out,ss,meta)
 	local cline = {
 		-- command
 		"ffmpeg",
@@ -189,10 +258,6 @@ function ss_trim(inp,out,ss,meta)
 	end
 	-- input
 	table.insert(cline,"-i "..inp)
-	-- remove comments
-	if not comments then
-		table.insert(cline,"-metadata comment=\"\" -metadata description=\"\"")
-	end
 	-- metadata
 	cline_metadata(cline,meta)
 	-- output
@@ -200,7 +265,17 @@ function ss_trim(inp,out,ss,meta)
 	run_command(table.concat(cline," "))
 end
 
-function to_trim(inp,out,to,meta)
+
+---
+-- Trim the sound file by streaming until a position.
+-- Copy the sound of an audio to another ending at a certain position.
+--
+-- @function to_trim
+-- @param #string inp the file to be streamed from
+-- @param #string out the file to be written to
+-- @param #time to the time to be written until
+-- @param #table meta the songs metadata
+local function to_trim(inp,out,to,meta)
 	local cline = {
 		-- command
 		"ffmpeg",
@@ -212,10 +287,6 @@ function to_trim(inp,out,to,meta)
 	if to then
 		-- end
 		table.insert(cline,"-to "..to)
-	end
-	-- remove comments
-	if not comments then
-		table.insert(cline,"-metadata comment=\"\" -metadata description=\"\"")
 	end
 	-- metadata
 	cline_metadata(cline,meta)
@@ -233,7 +304,7 @@ for i,s in pairs(songs) do
 	else
 		title = "\""..path..s.title..extention.."\""
 	end
-	
+
 	if i > #songs/2 then
 		if s.start ~= false then
 			ss_trim(inp,trim,s.start,s)
