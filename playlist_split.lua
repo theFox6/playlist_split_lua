@@ -44,7 +44,10 @@ for _,a in ipairs(arg) do
 	elseif a=="-d" or a == "--dry" then
 		dry_run = true
 	else
-		path,name,extention = a:match("^(.+/)([%w%.%-]+)(%.%w+)$")
+		path,name,extention = a:match("^(.+/)([^/%.]+)(%.%w+)$")
+		if path == nil then
+			print("warning: file path \"".. a .. "\" could not be parsed")
+		end
 	end
 end
 
@@ -68,7 +71,7 @@ local songs = {}
 -- @param #string msg the message to be written
 local function log(msg)
 	print(msg)
-	log_file:write(msg)
+	log_file:write(msg.."\n")
 end
 
 ---
