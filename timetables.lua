@@ -4,6 +4,8 @@
 --@module timetables
 local timetables = {}
 
+--TODO: hh:mm:ss.MMM
+
 ---
 --A time.
 --@type time

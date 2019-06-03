@@ -2,7 +2,7 @@ the playlist files contain the songs that will be split and their metadata
 every detail has to be put in a single line
 
 every song has to be enclosed in parentheses, the parentheses have to be the only thing in that line
-it is possuble to close and open a song via ")(" though
+it is possible to close and open a song via ")(" though
 data that is outside of parentheses is used for all of the following songs
 unclosed or double closed parentheses may cause unexpected behaviour
 
@@ -21,7 +21,9 @@ always global:
 Tn <tracknumber>	sets the tracknumber
 
 no given data after the tag removes it
-if no tracknumber is given after Tn it increases the tracknumber
+tracknumber + takes the last tracknumber and increases it
+
+-- <ignored>		ignores the line
 
 exaple of what this looks like:
 
@@ -30,20 +32,22 @@ Al their Album
 (
 St 00:00:00
 Ti first Song
-Tn 1
+Tn +
 )(
 St 00:05:00
 Du 00:06:00
 Ti their next Song
-Tn
+Tn +
 )
+-- nothing of importance in this line
 Ar another Artist
 (
 Ti a song
 En 00:15:00
 Al not their album
 )(
+-- tracknumber five of their album but the song of another artist
 Ti not their song but their album
 En 00:20:00
-Tn 3
+Tn 5
 )

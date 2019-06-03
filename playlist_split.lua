@@ -129,12 +129,16 @@ local function load_songs()
 					song.artist = c
 				end
 			elseif t=="Tn" then
-				if c == "" then
+				if c == "+" then
 					global.tracknum = global.tracknum + 1
 				else
 					global.tracknum = tonumber(c)
 				end
 				song.tracknum = global.tracknum
+			elseif t == "--" then
+				log(l)
+			else
+				log("warning: unparsed line \"" .. l .. "\"")
 			end
 		end
 	end
@@ -144,6 +148,14 @@ end
 
 load_songs()
 
+--[[ dump all songs
+for _,s in pairs(songs) do
+	log("song:")
+	for i,v in pairs(s) do
+		log(i .. " = " .. v)
+	end
+end
+]]
 
 ---
 -- Complete the songs times.
@@ -298,14 +310,26 @@ local function to_trim(inp,out,to,meta)
 	run_command(table.concat(cline," "))
 end
 
+local function remove_special(str)
+	local ret = ""
+	for p in str:gmatch("[%w%s_-]*") do
+		ret = ret .. p
+	end
+	return ret
+end
+
 for i,s in pairs(songs) do
 	local inp = "\""..path..name..extention.."\""
 	local trim = "\""..path..name.." trim"..i..extention.."\""
 	local title
 	if not s.title then
 		title = "\""..path..name.." track "..i..extention.."\""
+	elseif s.tracknum then
+	 title = "\""..path..s.tracknum.." - "..remove_special(s.title)..extention.."\""
+	elseif s.artist then
+	title = "\""..path..remove_special(s.artist).." - "..remove_special(s.title)..extention.."\""
 	else
-		title = "\""..path..s.title..extention.."\""
+		title = "\""..path..remove_special(s.title)..extention.."\""
 	end
 
 	if i > #songs/2 then
