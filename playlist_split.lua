@@ -18,7 +18,7 @@ local extention
 -- @function show_help
 local function show_help()
   print("playlist_split.lua")
-  print("a too to split a soudfile in many smaller ones")
+  print("a tool to split a soudfile in many smaller ones")
   print()
   print("give the file you want to split as argument")
   print("the songnames and durations will be read from a .txt file with the same name")
@@ -33,6 +33,7 @@ local function show_help()
   print("-d or --dry","dry run, don't execute any commands only print them out")
 end
 
+-- fetch and parse command line
 for _,a in ipairs(arg) do
 	if a=="-h" or a == "--help" then
 		show_help()
@@ -265,7 +266,7 @@ local function ss_trim(inp,out,ss,meta)
 		-- command
 		"ffmpeg",
 		-- no user interaction
-		"-nostdin"
+		"-nostdin",
 	}
 	if ss then
 		-- seek
@@ -273,6 +274,8 @@ local function ss_trim(inp,out,ss,meta)
 	end
 	-- input
 	table.insert(cline,"-i "..inp)
+	-- do not reencode
+	table.insert(cline,"-c copy")
 	-- metadata
 	cline_metadata(cline,meta)
 	-- output
@@ -297,7 +300,9 @@ local function to_trim(inp,out,to,meta)
 		-- no user interaction
 		"-nostdin",
 		-- input
-		"-i "..inp
+		"-i "..inp,
+		-- do not reencode
+		"-c copy"
 	}
 	if to then
 		-- end
